@@ -15,6 +15,8 @@ const SIDEBAR_ITEMS = [
       {
         name: '营销管理', icon: 'storefront', path: '/marketing',
         subItems: [
+          { name: '客户管理', path: '/marketing/customers' },
+          { name: '合同管理', path: '/marketing/contracts' },
           { name: '客户维度日报', path: '/marketing/customer-daily' },
           { name: '质量对比', path: '/marketing/quality-compare' },
           { name: '异常与协调', path: '/marketing/anomalies' },

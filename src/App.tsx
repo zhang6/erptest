@@ -7,6 +7,8 @@ import { QualityStats, ProcessInspection, QualityAnomaly } from './pages/Quality
 import { UnitStatus, DailyReport, EquipmentAnomaly, DispatchCommand } from './pages/Production';
 import { YieldReport, ConsumptionStats, CostAccounting, ProductionAnomalies, SummaryAnalysis } from './pages/ProductionDaily';
 import { TaskList } from './pages/Tasks';
+import { CustomerList } from './pages/Customers';
+import { ContractList } from './pages/Contracts';
 import { CustomerDailyReport, QualityCompare, AnomaliesCoordination, ReportingTracking, MonthlyQuarterlyAssessment } from './pages/Marketing';
 import { PerformanceScoring, IndicatorConfig } from './pages/Performance';
 import { BasicSettings, OrganizationSettings, RoleSettings, OperationLogs } from './pages/Settings';
@@ -43,6 +45,8 @@ function App() {
           <Route path="tasks/list" element={<TaskList />} />
           
           {/* Marketing */}
+          <Route path="marketing/customers" element={<CustomerList />} />
+          <Route path="marketing/contracts" element={<ContractList />} />
           <Route path="marketing/customer-daily" element={<CustomerDailyReport />} />
           <Route path="marketing/quality-compare" element={<QualityCompare />} />
           <Route path="marketing/anomalies" element={<AnomaliesCoordination />} />
