@@ -1,7 +1,24 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { supabase } from '../lib/supabase';
+import type { YieldReport } from '../types/database';
 
 export function YieldReport() {
+  const [reports, setReports] = useState<(YieldReport & { production_units?: { name: string } | null })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase.from('yield_reports').select('*, production_units(name)').eq('report_date', date).order('product_name');
+      setReports(data || []);
+      setLoading(false);
+    })();
+  }, [date]);
+
+  const calcRate = (a: number | null, b: number | null) => (a != null && b != null && b > 0 ? ((a / b) * 100).toFixed(1) + '%' : '-');
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -9,13 +26,7 @@ export function YieldReport() {
           <h1 className="text-2xl font-bold text-slate-900">产量日报</h1>
           <p className="text-sm text-slate-500 mt-1">记录当日产量、累计产量及计划完成率</p>
         </div>
-        <div className="flex space-x-3">
-          <input type="date" className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] shadow-sm" defaultValue={new Date().toISOString().split('T')[0]} />
-          <button className="bg-[#ec5b13] hover:bg-[#d94f0f] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center shadow-sm">
-            <span className="material-symbols-outlined mr-2 text-sm">add</span>
-            填报产量
-          </button>
-        </div>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] shadow-sm" />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -31,31 +42,25 @@ export function YieldReport() {
                 <th className="p-4 text-right">月度累计 (吨)</th>
                 <th className="p-4 text-right">月度计划 (吨)</th>
                 <th className="p-4 text-right">月度完成率</th>
-                <th className="p-4 text-center">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-sm">
-              {[
-                { unit: '炼胶一厂', product: '天然橡胶混炼胶', dailyPlan: 120, dailyActual: 125, dailyRate: '104.2%', monthActual: 2500, monthPlan: 3600, monthRate: '69.4%' },
-                { unit: '炼胶一厂', product: '合成橡胶混炼胶', dailyPlan: 80, dailyActual: 75, dailyRate: '93.8%', monthActual: 1600, monthPlan: 2400, monthRate: '66.7%' },
-                { unit: '炼胶二厂', product: '特种橡胶混炼胶', dailyPlan: 50, dailyActual: 52, dailyRate: '104.0%', monthActual: 1050, monthPlan: 1500, monthRate: '70.0%' },
-              ].map((item, idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-4 font-medium text-slate-900">{item.unit}</td>
-                  <td className="p-4 text-slate-700">{item.product}</td>
-                  <td className="p-4 text-right font-mono text-slate-600">{item.dailyPlan}</td>
-                  <td className="p-4 text-right font-mono font-medium text-slate-900">{item.dailyActual}</td>
+              {loading ? <tr><td colSpan={8} className="p-8 text-center text-slate-500">加载中...</td></tr> :
+                reports.length === 0 ? <tr><td colSpan={8} className="p-8 text-center text-slate-500">暂无数据，请先初始化测试数据</td></tr> :
+                reports.map((item) => (
+                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 font-medium text-slate-900">{(item.production_units as { name?: string })?.name || '-'}</td>
+                  <td className="p-4 text-slate-700">{item.product_name || '-'}</td>
+                  <td className="p-4 text-right font-mono text-slate-600">{item.daily_plan ?? '-'}</td>
+                  <td className="p-4 text-right font-mono font-medium text-slate-900">{item.daily_actual ?? '-'}</td>
                   <td className="p-4 text-right font-mono">
-                    <span className={parseFloat(item.dailyRate) >= 100 ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
-                      {item.dailyRate}
+                    <span className={parseFloat(calcRate(Number(item.daily_actual), Number(item.daily_plan))) >= 100 ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
+                      {calcRate(Number(item.daily_actual), Number(item.daily_plan))}
                     </span>
                   </td>
-                  <td className="p-4 text-right font-mono text-slate-600">{item.monthActual}</td>
-                  <td className="p-4 text-right font-mono text-slate-600">{item.monthPlan}</td>
-                  <td className="p-4 text-right font-mono text-slate-900 font-medium">{item.monthRate}</td>
-                  <td className="p-4 text-center">
-                    <button className="text-[#ec5b13] hover:text-[#d94f0f] font-medium text-xs transition-colors">编辑</button>
-                  </td>
+                  <td className="p-4 text-right font-mono text-slate-600">{item.month_actual ?? '-'}</td>
+                  <td className="p-4 text-right font-mono text-slate-600">{item.month_plan ?? '-'}</td>
+                  <td className="p-4 text-right font-mono text-slate-900 font-medium">{calcRate(Number(item.month_actual), Number(item.month_plan))}</td>
                 </tr>
               ))}
             </tbody>

@@ -1,6 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { insertRow, updateRow } from '../lib/api';
+import type { ProductionUnit, ProductionUnitStatus, EquipmentAnomaly, DispatchCommand } from '../types/database';
+
+const statusColor: Record<string, string> = { '运行中': 'emerald', '设备异常': 'rose', '待料停机': 'amber', '检修中': 'amber' };
 
 export function UnitStatus() {
+  const [units, setUnits] = useState<(ProductionUnit & { status?: ProductionUnitStatus; manager?: { name: string } })[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = async () => {
+    setLoading(true);
+    const { data: unitData } = await supabase.from('production_units').select('*').order('name');
+    const { data: statusData } = await supabase.from('production_unit_status').select('*');
+    const { data: emps } = await supabase.from('employees').select('id, name');
+    const empMap: Record<string, string> = {};
+    (emps || []).forEach((e: { id: string; name: string }) => { empMap[e.id] = e.name; });
+    const statusByUnit: Record<string, ProductionUnitStatus> = {};
+    (statusData || []).forEach((s: ProductionUnitStatus) => { if (s.unit_id) statusByUnit[s.unit_id] = s; });
+    const withStatus = (unitData || []).map((u: ProductionUnit) => ({
+      ...u,
+      status: statusByUnit[u.id],
+      manager: u.manager_id ? { name: empMap[u.manager_id] || '-' } : { name: '-' },
+    }));
+    setUnits(withStatus);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -9,77 +37,85 @@ export function UnitStatus() {
           <p className="text-sm text-slate-500 mt-1">实时监控各生产车间的运行状态和任务进度</p>
         </div>
         <div className="flex space-x-3">
-          <button className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center shadow-sm">
-            <span className="material-symbols-outlined mr-2 text-sm">refresh</span>
-            刷新数据
-          </button>
-          <button className="bg-[#ec5b13] hover:bg-[#d94f0f] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center shadow-sm">
-            <span className="material-symbols-outlined mr-2 text-sm">add</span>
-            手动录入数据
+          <button onClick={load} className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center shadow-sm">
+            <span className="material-symbols-outlined mr-2 text-sm">refresh</span>刷新数据
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { name: '冲压车间', manager: '王建国', status: '运行中', task: '汽车门板冲压', progress: 85, color: 'emerald' },
-          { name: '焊接车间', manager: '李志强', status: '运行中', task: '底盘焊接总成', progress: 62, color: 'emerald' },
-          { name: '涂装车间', manager: '张明', status: '设备异常', task: '车身底漆喷涂', progress: 30, color: 'rose' },
-          { name: '总装车间', manager: '刘伟', status: '运行中', task: 'A型车总装', progress: 90, color: 'emerald' },
-          { name: '注塑车间', manager: '陈东', status: '待料停机', task: '内饰件注塑', progress: 45, color: 'amber' },
-          { name: '机加工车间', manager: '赵强', status: '运行中', task: '发动机缸体加工', progress: 78, color: 'emerald' },
-        ].map((unit, idx) => (
-          <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-            <div className={`h-2 w-full bg-${unit.color}-500`}></div>
+        {loading ? <div className="col-span-full p-8 text-center text-slate-500">加载中...</div> :
+          units.length === 0 ? <div className="col-span-full p-8 text-center text-slate-500">暂无数据，请先在「设置-基础设置」中初始化测试数据</div> :
+          units.map((unit) => {
+            const st = unit.status;
+            const status = st?.status || '运行中';
+            const progress = st?.progress ?? 0;
+            const task = st?.current_task || '-';
+            const color = statusColor[status] || 'emerald';
+            return (
+          <div key={unit.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className={`h-2 w-full ${color === 'emerald' ? 'bg-emerald-500' : color === 'rose' ? 'bg-rose-500' : 'bg-amber-500'}`}></div>
             <div className="p-5 flex-1 flex flex-col">
               <div className="flex justify-between items-start mb-4">
                 <h2 className="text-lg font-bold text-slate-900">{unit.name}</h2>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-${unit.color}-100 text-${unit.color}-800`}>
-                  {unit.status}
-                </span>
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color === 'emerald' ? 'bg-emerald-100 text-emerald-800' : color === 'rose' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{status}</span>
               </div>
-              
               <div className="space-y-3 mb-6 flex-1">
                 <div className="flex items-center text-sm">
                   <span className="material-symbols-outlined text-slate-400 text-[18px] mr-2">person</span>
                   <span className="text-slate-500 w-16">负责人:</span>
-                  <span className="text-slate-900 font-medium">{unit.manager}</span>
+                  <span className="text-slate-900 font-medium">{unit.manager?.name}</span>
                 </div>
                 <div className="flex items-center text-sm">
                   <span className="material-symbols-outlined text-slate-400 text-[18px] mr-2">assignment</span>
                   <span className="text-slate-500 w-16">当前任务:</span>
-                  <span className="text-slate-900 font-medium truncate" title={unit.task}>{unit.task}</span>
+                  <span className="text-slate-900 font-medium truncate" title={task}>{task}</span>
                 </div>
               </div>
-
               <div>
                 <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-slate-500 font-medium">任务进度</span>
-                  <span className="text-slate-900 font-bold">{unit.progress}%</span>
+                  <span className="text-slate-900 font-bold">{progress}%</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div className={`bg-${unit.color}-500 h-2 rounded-full transition-all duration-500`} style={{ width: `${unit.progress}%` }}></div>
+                  <div className={`h-2 rounded-full transition-all duration-500 ${color === 'emerald' ? 'bg-emerald-500' : color === 'rose' ? 'bg-rose-500' : 'bg-amber-500'}`} style={{ width: `${progress}%` }}></div>
                 </div>
               </div>
             </div>
             <div className="bg-slate-50 p-3 border-t border-slate-200 flex justify-between">
-              <button className="text-xs font-medium text-slate-600 hover:text-[#ec5b13] transition-colors flex items-center">
-                <span className="material-symbols-outlined text-[16px] mr-1">visibility</span>
-                详情
-              </button>
-              <button className="text-xs font-medium text-slate-600 hover:text-[#ec5b13] transition-colors flex items-center">
-                <span className="material-symbols-outlined text-[16px] mr-1">chat</span>
-                联系负责人
-              </button>
+              <button className="text-xs font-medium text-slate-600 hover:text-[#ec5b13] transition-colors flex items-center">详情</button>
+              <button className="text-xs font-medium text-slate-600 hover:text-[#ec5b13] transition-colors flex items-center">联系负责人</button>
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
     </div>
   );
 }
 
 export function DailyReport() {
+  const [units, setUnits] = useState<ProductionUnit[]>([]);
+  const [form, setForm] = useState({ report_date: new Date().toISOString().split('T')[0], unit_id: '', shift: '早班', product_name: '', plan_quantity: 0, actual_quantity: 0, defect_count: 0, anomaly_hours: 0, remark: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    supabase.from('production_units').select('*').then(({ data }) => setUnits(data || []));
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await insertRow('production_daily_reports', { ...form, unit_id: form.unit_id || null } as never);
+      alert('提交成功');
+      setForm(f => ({ ...f, product_name: '', plan_quantity: 0, actual_quantity: 0, defect_count: 0, anomaly_hours: 0, remark: '' }));
+    } catch (err) {
+      alert('提交失败: ' + (err as Error).message);
+    }
+    setSubmitting(false);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -90,25 +126,22 @@ export function DailyReport() {
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <form className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">填报日期 <span className="text-rose-500">*</span></label>
-              <input type="date" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" defaultValue={new Date().toISOString().split('T')[0]} />
+              <input type="date" value={form.report_date} onChange={e => setForm(f => ({ ...f, report_date: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" required />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">生产单位 <span className="text-rose-500">*</span></label>
-              <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]">
+              <select value={form.unit_id} onChange={e => setForm(f => ({ ...f, unit_id: e.target.value }))} required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]">
                 <option value="">请选择生产单位</option>
-                <option value="冲压车间">冲压车间</option>
-                <option value="焊接车间">焊接车间</option>
-                <option value="涂装车间">涂装车间</option>
-                <option value="总装车间">总装车间</option>
+                {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">班次 <span className="text-rose-500">*</span></label>
-              <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]">
+              <select value={form.shift} onChange={e => setForm(f => ({ ...f, shift: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]">
                 <option value="早班">早班 (08:00 - 16:00)</option>
                 <option value="中班">中班 (16:00 - 00:00)</option>
                 <option value="晚班">晚班 (00:00 - 08:00)</option>
@@ -116,37 +149,32 @@ export function DailyReport() {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">产品名称 <span className="text-rose-500">*</span></label>
-              <input type="text" placeholder="请输入产品名称" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
+              <input type="text" placeholder="请输入产品名称" value={form.product_name} onChange={e => setForm(f => ({ ...f, product_name: e.target.value }))} required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">计划产量 <span className="text-rose-500">*</span></label>
-              <input type="number" placeholder="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
+              <input type="number" placeholder="0" value={form.plan_quantity || ''} onChange={e => setForm(f => ({ ...f, plan_quantity: +e.target.value || 0 }))} required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">实际产量 <span className="text-rose-500">*</span></label>
-              <input type="number" placeholder="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
+              <input type="number" placeholder="0" value={form.actual_quantity || ''} onChange={e => setForm(f => ({ ...f, actual_quantity: +e.target.value || 0 }))} required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">不良品数</label>
-              <input type="number" placeholder="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
+              <input type="number" placeholder="0" value={form.defect_count || ''} onChange={e => setForm(f => ({ ...f, defect_count: +e.target.value || 0 }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-700">异常工时 (小时)</label>
-              <input type="number" step="0.5" placeholder="0.0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
+              <input type="number" step="0.5" placeholder="0.0" value={form.anomaly_hours || ''} onChange={e => setForm(f => ({ ...f, anomaly_hours: +e.target.value || 0 }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13]" />
             </div>
           </div>
-          
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-700">备注说明</label>
-            <textarea rows={4} placeholder="请输入异常原因、设备故障等其他需要说明的情况" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] resize-none"></textarea>
+            <textarea rows={4} placeholder="请输入异常原因、设备故障等其他需要说明的情况" value={form.remark} onChange={e => setForm(f => ({ ...f, remark: e.target.value }))} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#ec5b13]/20 focus:border-[#ec5b13] resize-none"></textarea>
           </div>
-
           <div className="pt-4 flex justify-end space-x-3 border-t border-slate-100">
-            <button type="button" className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-6 py-2 rounded-lg text-sm font-medium transition-colors">
-              保存草稿
-            </button>
-            <button type="submit" className="bg-[#ec5b13] hover:bg-[#d94f0f] text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-              提交日报
+            <button type="submit" disabled={submitting} className="bg-[#ec5b13] hover:bg-[#d94f0f] disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+              {submitting ? '提交中...' : '提交日报'}
             </button>
           </div>
         </form>

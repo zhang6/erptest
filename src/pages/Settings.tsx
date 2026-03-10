@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { seedTestData } from '../lib/seed';
 
 export function BasicSettings() {
+  const [seedLoading, setSeedLoading] = useState(false);
+  const [seedMsg, setSeedMsg] = useState('');
+
+  const handleSeed = async () => {
+    setSeedLoading(true);
+    setSeedMsg('');
+    const res = await seedTestData();
+    setSeedMsg(res.message);
+    setSeedLoading(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -11,6 +23,15 @@ export function BasicSettings() {
         <button className="bg-[#ec5b13] hover:bg-[#d94f0f] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
           保存配置
         </button>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <h3 className="text-sm font-bold text-amber-900 mb-2">测试数据初始化</h3>
+        <p className="text-sm text-amber-800 mb-3">首次使用或数据库为空时，可点击下方按钮初始化测试数据（组织、部门、员工、客户、合同、生产单位、任务、绩效等）。</p>
+        <button onClick={handleSeed} disabled={seedLoading} className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+          {seedLoading ? '初始化中...' : '初始化测试数据'}
+        </button>
+        {seedMsg && <p className="mt-2 text-sm text-amber-800">{seedMsg}</p>}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 max-w-3xl">
