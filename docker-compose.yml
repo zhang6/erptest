@@ -1,0 +1,10 @@
+services:
+  erptest:
+    container_name: erptest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: erptest:latest
+    ports:
+      - "${ERPPROJECT_PORT:-8080}:80"
+    restart: unless-stopped
